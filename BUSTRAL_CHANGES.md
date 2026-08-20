@@ -88,6 +88,43 @@ through — a real public HTTPS URL by the time Postiz's own fetch sees it.
 `GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN` — must be the
 same values `app_bustral` uses for its own Drive account.
 
+## Tarea 5 — Spotify channel (via RSS, no publish API exists)
+
+Spotify has **no public API to publish/upload a podcast episode** for a
+third-party app (confirmed — this is true of every podcast platform, not
+a Postiz limitation). The only way anything shows up in Spotify is via an
+RSS 2.0 feed the podcaster hosts, registered once in Spotify for
+Podcasters' "already hosting elsewhere" import flow.
+
+So `SpotifyProvider` (same `SocialProvider` shape as every other channel,
+`identifier: 'spotify'`) does real Spotify OAuth only to know whose show
+this is for display — `post()` makes **no Spotify API call at all**.
+Publishing a post to a Spotify channel just persists it normally (generic
+post workflow); it becomes visible the next time Spotify polls the feed
+this fork now serves at `GET /public/podcast/:integrationId/feed.xml`
+(new `PodcastFeedService`, wired into the existing public,
+unauthenticated `PublicController`). Register that URL once per
+organization's Spotify channel and every future published post with a
+video/audio attachment shows up automatically — same mechanism every
+podcast app uses (this is literally how Spotify for Podcasters' own "RSS
+import" option works).
+
+**New files**:
+- `libraries/nestjs-libraries/src/integrations/social/spotify.provider.ts`
+- `libraries/nestjs-libraries/src/dtos/posts/providers-settings/spotify.dto.ts`
+- `libraries/nestjs-libraries/src/database/prisma/posts/podcast-feed.service.ts`
+
+**Modified**: `libraries/nestjs-libraries/src/integrations/integration.manager.ts`,
+`libraries/nestjs-libraries/src/database/prisma/database.module.ts`,
+`apps/backend/src/api/routes/public.controller.ts`
+
+**Env vars**: `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` (register a
+Spotify Developer app, redirect URI `<FRONTEND_URL>/integrations/social/spotify`).
+
+**Known gap, not fixed here**: no `apps/frontend/public/icons/platforms/spotify.png`
+exists — the channel picker will show a broken/missing icon until a real
+Spotify brand asset is added (deliberately not fabricated here).
+
 ## Deploy
 
 CI builds and pushes `ghcr.io/bustralcto/postiz-app:latest` (same pattern
