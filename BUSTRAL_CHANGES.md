@@ -121,9 +121,9 @@ import" option works).
 **Env vars**: `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` (register a
 Spotify Developer app, redirect URI `<FRONTEND_URL>/integrations/social/spotify`).
 
-**Known gap, not fixed here**: no `apps/frontend/public/icons/platforms/spotify.png`
-exists — the channel picker will show a broken/missing icon until a real
-Spotify brand asset is added (deliberately not fabricated here).
+**Icon**: `apps/frontend/public/icons/platforms/spotify.png` (converted from
+the `.jpg` the user provided — every picker in the frontend hardcodes the
+`.png` extension per `identifier`, no fallback to other formats).
 
 ## Deploy
 
