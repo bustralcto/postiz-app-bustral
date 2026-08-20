@@ -12,16 +12,19 @@ import { AuthService } from '@gitroom/helpers/auth/auth.service';
 // to Postiz by hand.
 //
 // This is NOT a general "connect your own Drive" integration (explicitly
-// out of scope, see the plan) — it reads from ONE fixed Google account: the
-// same Workspace account app_bustral's own google-drive.service.ts already
-// uses (drive.file scope, single shared refresh token in this app's own
-// .env, not per-organization OAuth). What IS per-organization is which
-// SUBFOLDER of that account belongs to this Postiz organization's client —
-// that's the one piece of config each org sets once, reusing this
-// third-party framework's per-org apiKey slot to hold the Drive folder id
-// (looked up by organization slug the same way app_bustral's
-// ensureSubfolder does, so both sides agree on the same folder without any
-// extra coordination step).
+// out of scope, see the plan) — it reads from ONE fixed Google Workspace
+// Drive account, via its OWN dedicated OAuth client (deliberately separate
+// from app_bustral's own credentials — see .env.example).
+//
+// Design note (2026-08-19, changed after production testing): Postiz has
+// ONE organization for the whole Bustral team, covering every client's
+// pages — there's no per-client Postiz organization to attach a separate
+// Drive subfolder connection to. So this reads ONE flat shared folder
+// ("Videos Producidos") containing every approved video from every client,
+// connected ONCE (apiKey here = that single folder's id). app_bustral's
+// content-piece.service.ts#uploadVideo names each file
+// <org-slug>_<piece-title-slug>_<YYYY-MM>.<ext> so the community can still
+// tell clients apart by filename in the picker.
 const VIDEO_MIME_TYPES = new Set(['video/mp4', 'video/quicktime']);
 
 /**
@@ -33,10 +36,18 @@ const VIDEO_MIME_TYPES = new Set(['video/mp4', 'video/quicktime']);
  * expired proxy URL without needing its own separate lookup.
  */
 function buildProxyUrl(fileId: string): string {
-  const backendUrl = (process.env.BACKEND_INTERNAL_URL || '').replace(/\/$/, '');
+  // Deliberately NOT BACKEND_INTERNAL_URL — that's for server-to-server
+  // traffic INSIDE the docker network (e.g. http://backend:3000) and isn't
+  // reachable from wherever Postiz's own outbound fetch actually runs, nor
+  // does it pass isSafePublicHttpsUrl (https + a real public DNS name is
+  // required — see webhook.url.validator.ts, enforced by ImportMediaDto on
+  // the /third-party/:id/import route this URL is submitted to). This has
+  // to be the same public https://api.postiz.bustral.com style hostname
+  // NEXT_PUBLIC_BACKEND_URL already carries for the browser.
+  const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
   if (!backendUrl) {
     throw new Error(
-      'BACKEND_INTERNAL_URL is not configured — needed to build the signed Drive proxy URL Postiz uses to preview/import Bustral Drive files.'
+      'NEXT_PUBLIC_BACKEND_URL is not configured — needed to build the signed Drive proxy URL Postiz uses to preview/import Bustral Drive files.'
     );
   }
   const token = AuthService.signJWT({
@@ -53,13 +64,13 @@ function buildProxyUrl(fileId: string): string {
   identifier: 'google-drive-bustral',
   title: 'Bustral Drive',
   description:
-    'Import approved content videos from the Bustral Drive folder for this client (uploaded by the filmmaker via app_bustral, once the client approved it).',
+    'Import approved content videos from the shared Bustral Drive folder (uploaded by filmmakers via app_bustral, once the client approved each one — filenames are prefixed with the client slug).',
   position: 'media-library',
   fields: [
     {
       name: 'apiKey',
       description:
-        "This client's Bustral Drive folder id (the same subfolder app_bustral created under its content folder for this organization — ask an admin if unsure).",
+        'The shared Drive folder id for approved videos (same for every client — ask an admin if unsure). Connect once.',
       type: 'text',
       placeholder: 'Drive folder id',
     },
@@ -83,7 +94,10 @@ export class GoogleDriveProvider extends ThirdPartyAbstract {
         return false;
       }
       return {
-        name: `Bustral Drive: ${res.data.name}`,
+        // The frontend renders "{provider.title}: {this.name}" itself
+        // (ThirdPartyMediaLibraryBrowser) — including "Bustral Drive" here
+        // too doubled it up as "Bustral Drive: Bustral Drive: <folder>".
+        name: res.data.name || 'Videos Producidos',
         username: 'bustral-drive',
         id: apiKey.trim(),
       };

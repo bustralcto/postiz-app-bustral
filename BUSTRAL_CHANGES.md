@@ -57,14 +57,26 @@ media picker, instead of downloading it from Drive and re-uploading it by
 hand.
 
 **Not** a general "connect your own Drive" feature (out of scope by
-design) — it reads from ONE fixed Google Workspace account, the exact same
-one `app_bustral`'s own `google-drive.service.ts` uses (`drive.file`
-scope). What's per-organization is only which Drive **subfolder** belongs
-to that org's client — set once via the existing "add API key" third-party
-UI, where the `apiKey` field is repurposed to hold the Drive folder id
-(same value as the subfolder `app_bustral`'s `ensureSubfolder` creates for
-that organization, so both sides agree on the same folder without any
-extra coordination).
+design) — it reads from ONE fixed Google Workspace account.
+
+**Design change (2026-08-19, confirmed in production testing)**: originally
+this pointed at a per-organization subfolder (`app_bustral`'s
+`ensureSubfolder`, one subfolder per client). Postiz only has ONE
+"organization" for the whole Bustral community team (all clients' pages
+live under it), so "one Drive connection per Postiz org" couldn't
+distinguish clients anyway — a single flat folder is simpler and matches
+that reality. Now every approved video from every client lands in ONE
+shared Drive folder ("Videos Producidos"), and the filename itself carries
+the client — `app_bustral`'s `uploadVideo` names each file
+`<org-slug>_<piece-title-slug>_<YYYY-MM>.<ext>` so the community can tell
+clients apart in the picker by name alone. Connect once in Postiz with
+that single folder's id — no more per-client reconnection.
+
+Own OAuth client (`GOOGLE_DRIVE_CLIENT_ID`/`SECRET`/`REFRESH_TOKEN`),
+deliberately separate from `app_bustral`'s own credentials for cleaner
+scoping/revocation — same underlying Workspace Drive account, generated
+via `scripts/get-drive-refresh-token.js` (one-time consent flow, run
+inside the `postiz` container where `googleapis` is already installed).
 
 Because `drive.file`-scoped files are private, `drive.google.com` links
 don't work unauthenticated — and Postiz's generic import path
@@ -75,14 +87,27 @@ small proxy route (`GoogleDriveProxyController`, `GET
 server-side, verifies a short-lived signed JWT (minted by the provider
 itself, 5 minute TTL) instead of a user session, and streams the file
 through — a real public HTTPS URL by the time Postiz's own fetch sees it.
+That URL is built from `NEXT_PUBLIC_BACKEND_URL` (already required,
+already a real public hostname) — NOT `BACKEND_INTERNAL_URL` (only
+reachable inside the docker network, and fails
+`isSafePublicHttpsUrl`/`ImportMediaDto`'s validation that this URL must be
+a real public HTTPS host). Using the wrong one silently 400'd the import
+while the frontend's toast claimed success regardless (a pre-existing
+upstream bug in `third-party.media-library.tsx#importSelected` — it never
+checks the fetch's `response.ok`).
 
 **New files**:
 - `libraries/nestjs-libraries/src/3rdparties/google-drive/google-drive.client.ts`
 - `libraries/nestjs-libraries/src/3rdparties/google-drive/google-drive.provider.ts`
 - `apps/backend/src/api/routes/google-drive-proxy.controller.ts`
+- `scripts/get-drive-refresh-token.js` (one-time refresh-token bootstrap)
 
 **Modified**: `libraries/nestjs-libraries/src/3rdparties/thirdparty.module.ts`,
 `apps/backend/src/api/api.module.ts`
+
+**Icon**: `apps/frontend/public/icons/third-party/google-drive-bustral.png`
+— a simple generated placeholder (Drive-style tricolor triangle), not the
+real Google Drive brand asset (not available to fabricate here).
 
 **Env vars** (see `.env.example`): `GOOGLE_DRIVE_CLIENT_ID`,
 `GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN` — must be the
