@@ -57,11 +57,21 @@ export class CustomFileValidationPipe implements PipeTransform {
 
 }
 
+// Bustral fix: 10 MB for images was well under Meta's real ceiling
+// (~30 MB for a Facebook/Instagram feed photo), rejecting normal
+// camera/export output before it ever reached Facebook's own API. Both
+// limits are now configurable via env vars instead of hardcoded again,
+// defaulting to Meta's actual documented limits (confirm against Meta's
+// docs again if they change — they do, periodically).
 export function getMaxSize(mimeType: string): number {
   if (mimeType.startsWith('image/')) {
-    return 10 * 1024 * 1024; // 10 MB
+    return (
+      Number(process.env.BUSTRAL_MAX_PHOTO_SIZE_MB || '30') * 1024 * 1024
+    );
   } else if (mimeType.startsWith('video/')) {
-    return 1024 * 1024 * 1024; // 1 GB
+    return (
+      Number(process.env.BUSTRAL_MAX_VIDEO_SIZE_MB || '4096') * 1024 * 1024
+    );
   } else {
     throw new BadRequestException('Unsupported file type.');
   }
