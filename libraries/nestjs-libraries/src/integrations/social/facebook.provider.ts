@@ -757,7 +757,22 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
 
     let finalId = '';
     let finalUrl = '';
-    if (hasExtension(firstPost?.media?.[0]?.path, 'mp4')) {
+    // Bustral fix: a carousel with a single video used to route through the
+    // single-video-post branch below (using only media[0], dropping any
+    // other attachments) whenever the FIRST item happened to be an mp4, and
+    // a carousel with photos+video mixed used to upload EVERY item —
+    // including .mp4 ones — to /photos, which Facebook rejects with code
+    // 100/subcode 1366046 ("Photos should be less than 10 MB...") because
+    // it tries to decode the video as an image. A true single-video post
+    // (exactly one media item, and it's a video) still takes the dedicated
+    // /videos + reel URL path; anything else (any photo, or more than one
+    // item) goes through the mixed-media /feed path below, uploading each
+    // item to the endpoint that matches its own type.
+    const isSingleVideoPost =
+      (firstPost?.media?.length ?? 0) === 1 &&
+      hasExtension(firstPost?.media?.[0]?.path, 'mp4');
+
+    if (isSingleVideoPost) {
       const {
         id: videoId,
         permalink_url,
@@ -787,26 +802,43 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         ? []
         : await Promise.all(
             firstPost.media.map(async (media) => {
-              const { id: photoId } = await (
+              const isVideo = hasExtension(media.path, 'mp4');
+              const { id: mediaId } = await (
                 await this.fetch(
-                  `https://graph.facebook.com/v20.0/${id}/photos?access_token=${accessToken}`,
+                  `https://graph.facebook.com/v20.0/${id}/${
+                    isVideo ? 'videos' : 'photos'
+                  }?access_token=${accessToken}`,
                   {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                      url: media.path,
-                      published: false,
-                    }),
+                    body: JSON.stringify(
+                      isVideo
+                        ? { file_url: media.path, published: false }
+                        : { url: media.path, published: false }
+                    ),
                   },
-                  'upload images slides'
+                  isVideo ? 'upload video slide' : 'upload images slides'
                 )
               ).json();
 
-              return { media_fbid: photoId };
+              return { media_fbid: mediaId, isVideo };
             })
           );
+
+      // A video uploaded unpublished to /videos isn't necessarily ready for
+      // attached_media right away - Facebook still needs to finish
+      // processing it, same as a standalone video post. Poll the same
+      // status check used for story videos before building the feed, so a
+      // mixed carousel doesn't race the video's own processing.
+      for (const { media_fbid, isVideo } of uploadPhotos) {
+        if (!isVideo) continue;
+        // eslint-disable-next-line no-constant-condition
+        while (!(await this.fbVideoStatus(media_fbid, accessToken))) {
+          await timer(5000);
+        }
+      }
 
       // Background presets are only valid on text-only posts (no media) and
       // Facebook caps them at ~130 chars, so we only attach the preset when it
@@ -829,7 +861,11 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
               },
               body: JSON.stringify({
                 ...(uploadPhotos?.length
-                  ? { attached_media: uploadPhotos }
+                  ? {
+                      attached_media: uploadPhotos.map(({ media_fbid }) => ({
+                        media_fbid,
+                      })),
+                    }
                   : {}),
                 ...(firstPost?.settings?.url
                   ? { link: firstPost.settings.url }

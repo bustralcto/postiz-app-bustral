@@ -27,6 +27,7 @@ import { promisify } from 'util';
 import { OnlyURL } from '@gitroom/nestjs-libraries/dtos/webhooks/webhooks.dto';
 import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { ssrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/ssrf.safe.dispatcher';
+import { PodcastFeedService } from '@gitroom/nestjs-libraries/database/prisma/posts/podcast-feed.service';
 
 const pump = promisify(pipeline);
 
@@ -37,8 +38,24 @@ export class PublicController {
     private _trackService: TrackService,
     private _agentGraphInsertService: AgentGraphInsertService,
     private _postsService: PostsService,
-    private _subscriptionService: SubscriptionService
+    private _subscriptionService: SubscriptionService,
+    private _podcastFeedService: PodcastFeedService
   ) {}
+
+  // Bustral Tarea 5 — see spotify.provider.ts for why this exists instead
+  // of an actual Spotify publish API call. Register this exact URL once in
+  // Spotify for Podcasters' "already hosting elsewhere" / RSS import flow
+  // and every future published post on that Spotify channel shows up
+  // there automatically.
+  @Get('/podcast/:integrationId/feed.xml')
+  async podcastFeed(
+    @Param('integrationId') integrationId: string,
+    @Res() res: Response
+  ) {
+    const xml = await this._podcastFeedService.buildFeedXml(integrationId);
+    res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
+    res.send(xml);
+  }
   @Post('/agent')
   async createAgent(@Body() body: { text: string; apiKey: string }) {
     if (

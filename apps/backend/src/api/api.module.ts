@@ -47,6 +47,7 @@ import { AppleProvider } from '@gitroom/backend/services/auth/providers/apple.pr
 import { FarcasterProvider } from '@gitroom/backend/services/auth/providers/farcaster.provider';
 import { WalletProvider } from '@gitroom/backend/services/auth/providers/wallet.provider';
 import { OauthProvider } from '@gitroom/backend/services/auth/providers/oauth.provider';
+import { GoogleDriveProxyController } from '@gitroom/backend/api/routes/google-drive-proxy.controller';
 
 const authenticatedController = [
   UsersController,
@@ -81,6 +82,7 @@ const authenticatedController = [
         MonitorController,
         EnterpriseController,
         NoAuthIntegrationsController,
+        GoogleDriveProxyController,
         OAuthController,
         ...authenticatedController,
       ],
