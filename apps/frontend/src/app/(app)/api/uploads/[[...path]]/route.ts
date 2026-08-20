@@ -28,6 +28,15 @@ export const GET = async (
     }>;
   }
 ) => {
+  // Bustral fix: next.config.js's rewrite to this route is now unconditional
+  // (evaluated at build time, so it couldn't read STORAGE_PROVIDER from the
+  // runtime .env anyway) — the local-storage check has to live here instead,
+  // where process.env is read at request time. Non-local storage (e.g. S3)
+  // still 404s exactly like before.
+  if (process.env.STORAGE_PROVIDER !== 'local') {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
   const { path } = await context.params;
   const base = resolve(process.env.UPLOAD_DIRECTORY!);
   const filePath = resolve(base, (path ?? []).join('/'));

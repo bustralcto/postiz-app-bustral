@@ -34,12 +34,17 @@ const nextConfig = {
 
     return config;
   },
+  // Bustral fix: redirects()/rewrites() run at `next build` time, so
+  // conditioning them on STORAGE_PROVIDER baked in whatever that env var
+  // happened to be during the image build — never the real runtime value.
+  // Both are now unconditional; the actual local-vs-remote-storage decision
+  // moved to the route handler itself (see api/uploads/[[...path]]/route.ts),
+  // which reads process.env on every request.
   async redirects() {
     return [
       {
         source: '/api/uploads/:path*',
-        destination:
-          process.env.STORAGE_PROVIDER === 'local' ? '/uploads/:path*' : '/404',
+        destination: '/uploads/:path*',
         permanent: true,
       },
     ];
@@ -48,10 +53,7 @@ const nextConfig = {
     return [
       {
         source: '/uploads/:path*',
-        destination:
-          process.env.STORAGE_PROVIDER === 'local'
-            ? '/api/uploads/:path*'
-            : '/404',
+        destination: '/api/uploads/:path*',
       },
     ];
   },
