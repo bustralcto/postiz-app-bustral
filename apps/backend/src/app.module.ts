@@ -17,11 +17,16 @@ import { TemporalRegisterMissingSearchAttributesModule } from '@gitroom/nestjs-l
 import { InfiniteWorkflowRegisterModule } from '@gitroom/nestjs-libraries/temporal/infinite.workflow.register';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Global()
 @Module({
   imports: [
     SentryModule.forRoot(),
+    // Bustral fix: drives MediaCleanupService's nightly sweep (see that
+    // file for why it's needed — Postiz never deleted uploaded/imported
+    // media on its own before this).
+    ScheduleModule.forRoot(),
     DatabaseModule,
     ApiModule,
     PublicApiModule,

@@ -12,6 +12,7 @@ import { IntegrationRepository } from '@gitroom/nestjs-libraries/database/prisma
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
 import { PostsRepository } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.repository';
 import { PodcastFeedService } from '@gitroom/nestjs-libraries/database/prisma/posts/podcast-feed.service';
+import { MediaCleanupService } from '@gitroom/nestjs-libraries/database/prisma/media/media-cleanup.service';
 import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
 import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/media.service';
 import { MediaRepository } from '@gitroom/nestjs-libraries/database/prisma/media/media.repository';
@@ -69,6 +70,7 @@ import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/adm
     PostsService,
     PostsRepository,
     PodcastFeedService,
+    MediaCleanupService,
     StripeService,
     SignatureRepository,
     AutopostRepository,

@@ -150,6 +150,36 @@ Spotify Developer app, redirect URI `<FRONTEND_URL>/integrations/social/spotify`
 the `.jpg` the user provided — every picker in the frontend hardcodes the
 `.png` extension per `identifier`, no fallback to other formats).
 
+## Tarea 6 — nightly cleanup of local media (disk fills up otherwise)
+
+Postiz never deleted uploaded/imported media on its own — everything ever
+uploaded (by hand, or imported via Tarea 4's Bustral Drive picker) stays
+on `/uploads` forever. Not sustainable once the community regularly
+imports full-size approved videos from Drive.
+
+New `MediaCleanupService` (`@Cron`, `@nestjs/schedule` — already a
+dependency, just never wired up before) runs nightly at 3am: deletes the
+LOCAL file (`STORAGE_PROVIDER=local` only — `CloudflareStorage#removeFile`
+is an upstream no-op stub, not implemented here) for any `Media` row where
+every `Post` referencing it (matched by URL substring in `Post.image`,
+there's no FK) is already `PUBLISHED` and the newest of those posts'
+`publishDate` is more than 7 days in the past. Media still needed by a
+queued/draft/errored post is never touched regardless of age.
+
+**Explicit product decision (2026-08-20)**: NOT scoped to Drive-imported
+media only — applies to every published media file past the retention
+window, including anything the community uploaded by hand with no backup
+elsewhere. Once deleted here it's gone for good (the already-published
+post on Facebook/Instagram/etc is completely unaffected, only Postiz's own
+local copy is removed). The original in Bustral's Drive folder (Tarea 4
+imports) is unaffected either way — that's a separate copy in a separate
+system.
+
+**New file**: `libraries/nestjs-libraries/src/database/prisma/media/media-cleanup.service.ts`
+
+**Modified**: `apps/backend/src/app.module.ts` (`ScheduleModule.forRoot()`),
+`libraries/nestjs-libraries/src/database/prisma/database.module.ts`
+
 ## Deploy
 
 CI builds and pushes `ghcr.io/bustralcto/postiz-app:latest` (same pattern
