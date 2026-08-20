@@ -1,0 +1,56 @@
+name: Bustral Deploy
+
+# Bustral fork's own build workflow — separate from the upstream
+# build-containers.yml (which only triggers on tags and builds
+# amd64+arm64 with --no-cache, meant for gitroomhq's own releases).
+# This one triggers on every push to main, builds amd64 only (production
+# server is a standard x86_64 VPS), and uses GHA layer caching so a
+# normal change rebuilds in a couple minutes instead of a cold ~15-20.
+#
+# Deploy itself is manual on purpose (2026-08-19, explicit decision) —
+# this workflow only publishes the image to GHCR. To actually roll it out:
+#   ssh into the server, edit the postiz service's `image:` line in its
+#   docker-compose.yml to ghcr.io/bustralcto/postiz-app:latest (one-time),
+#   then `docker compose pull postiz && docker compose up -d postiz`.
+# Same DEPLOY_GHCR_TOKEN app_bustral's own deploy already uses for
+# `docker login ghcr.io` on the server — nothing new to generate there.
+
+on:
+  push:
+    branches: [main]
+
+env:
+  IMAGE: ghcr.io/bustralcto/postiz-app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Postiz image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.dev
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_VERSION=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
