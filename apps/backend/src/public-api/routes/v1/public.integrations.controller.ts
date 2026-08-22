@@ -66,6 +66,7 @@ import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/us
 import { SuperAdminGuard } from '@gitroom/backend/services/auth/super.admin.guard';
 import { timer } from '@gitroom/helpers/utils/timer';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { buildProxyUrl } from '@gitroom/nestjs-libraries/3rdparties/google-drive/google-drive.provider';
 
 @ApiTags('Public API')
 @Controller('/public/v1')
@@ -173,6 +174,27 @@ export class PublicIntegrationsController {
   ) {
     Sentry.metrics.count('public_api-request', 1);
     return { date: await this._postsService.findFreeDateTime(org.id, id) };
+  }
+
+  // Bridge for app_bustral's automated publish flow (Bustral -> Postiz):
+  // the filmmaker's video lives in a private drive.file-scoped Drive
+  // folder that Postiz's own upload-from-url can't fetch directly (no
+  // anonymous public URL). buildProxyUrl mints a short-lived signed URL to
+  // this fork's own /third-party/google-drive/proxy route (already used by
+  // the "Bustral Drive" media-library picker), backed by the JWT_SECRET
+  // that lives ONLY in this app — app_bustral has no way to sign that
+  // token itself, so it calls this endpoint (authenticated the same way as
+  // the rest of the Public API, via its org's api_key) to get one instead.
+  @Get('/bustral/drive-signed-url')
+  async getBustralDriveSignedUrl(
+    @GetOrgFromRequest() org: Organization,
+    @Query('fileId') fileId?: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    if (!fileId) {
+      throw new HttpException({ msg: 'Missing fileId' }, 400);
+    }
+    return { url: buildProxyUrl(fileId) };
   }
 
   @Get('/posts')
