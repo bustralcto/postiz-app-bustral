@@ -57,7 +57,13 @@ export function useUppyUploader(props: {
       restrictions: {
         // maxNumberOfFiles: 5,
         // allowedFileTypes: allowedFileTypes.split(','),
-        maxFileSize: 1000000000, // Default 1GB, but we'll override with custom validation
+        // Bustral fix: was hardcoded to 1GB, silently rejecting the
+        // filmmaker's video BEFORE the custom validation below (which
+        // already allowed up to 1GB video) even ran. Matches the backend's
+        // own ceiling (getMaxSize in custom.upload.validation.ts, default
+        // BUSTRAL_MAX_VIDEO_SIZE_MB=4096) so this layer never rejects
+        // something the API would have accepted.
+        maxFileSize: 4096 * 1024 * 1024, // 4GB, overridden below by per-type validation anyway
       },
     });
 
@@ -133,7 +139,7 @@ export function useUppyUploader(props: {
             const isVideo = file.type?.startsWith('video/');
 
             const maxImageSize = 30 * 1024 * 1024; // 30MB
-            const maxVideoSize = 1000 * 1024 * 1024; // 1GB
+            const maxVideoSize = 4096 * 1024 * 1024; // 4GB — matches getMaxSize's default (Bustral fix)
 
             if (isImage && file.size > maxImageSize) {
               const error = new Error(
@@ -150,12 +156,12 @@ export function useUppyUploader(props: {
 
             if (isVideo && file.size > maxVideoSize) {
               const error = new Error(
-                `Video file "${file.name}" is too large. Maximum size allowed is 1GB.`
+                `Video file "${file.name}" is too large. Maximum size allowed is 4GB.`
               );
               uppy2.log(error.message, 'error');
               uppy2.info(error.message, 'error', 5000);
               toast.show(
-                `Video file is too large. Maximum size allowed is 1GB.`
+                `Video file is too large. Maximum size allowed is 4GB.`
               );
               uppy2.removeFile(file.id); // Remove file from queue
               return reject(error);
