@@ -53,8 +53,10 @@ export class LinkedinPageProvider
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token,
-          client_id: process.env.LINKEDIN_CLIENT_ID!,
-          client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
+          client_id: (process.env.LINKEDIN_PAGE_CLIENT_ID ||
+            process.env.LINKEDIN_CLIENT_ID)!,
+          client_secret: (process.env.LINKEDIN_PAGE_CLIENT_SECRET ||
+            process.env.LINKEDIN_CLIENT_SECRET)!,
         }),
       })
     ).json();
@@ -124,7 +126,7 @@ export class LinkedinPageProvider
     const state = makeId(6);
     const codeVerifier = makeId(30);
     const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&prompt=none&client_id=${
-      process.env.LINKEDIN_CLIENT_ID
+      process.env.LINKEDIN_PAGE_CLIENT_ID || process.env.LINKEDIN_CLIENT_ID
     }&redirect_uri=${encodeURIComponent(
       `${process.env.FRONTEND_URL}/integrations/social/linkedin-page`
     )}&state=${state}&scope=${encodeURIComponent(this.scopes.join(' '))}`;
@@ -219,8 +221,15 @@ export class LinkedinPageProvider
       'redirect_uri',
       `${process.env.FRONTEND_URL}/integrations/social/linkedin-page`
     );
-    body.append('client_id', process.env.LINKEDIN_CLIENT_ID!);
-    body.append('client_secret', process.env.LINKEDIN_CLIENT_SECRET!);
+    body.append(
+      'client_id',
+      (process.env.LINKEDIN_PAGE_CLIENT_ID || process.env.LINKEDIN_CLIENT_ID)!
+    );
+    body.append(
+      'client_secret',
+      (process.env.LINKEDIN_PAGE_CLIENT_SECRET ||
+        process.env.LINKEDIN_CLIENT_SECRET)!
+    );
 
     const {
       access_token: accessToken,
