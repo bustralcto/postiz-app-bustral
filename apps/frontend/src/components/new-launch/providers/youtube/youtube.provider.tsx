@@ -1,12 +1,14 @@
 'use client';
 
-import { FC } from 'react';
+import { FC, useMemo } from 'react';
 import {
   PostComment,
   withProvider,
 } from '@gitroom/frontend/components/new-launch/providers/high.order.provider';
 import { YoutubeSettingsDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/youtube.settings.dto';
 import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
+import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
+import { hasExtension } from '@gitroom/helpers/utils/has.extension';
 import { Input } from '@gitroom/react/form/input';
 import { MediumTags } from '@gitroom/frontend/components/new-launch/providers/medium/medium.tags';
 import { MediaComponent } from '@gitroom/frontend/components/media/media.component';
@@ -39,6 +41,15 @@ const madeForKids = [
 ];
 const YoutubeSettings: FC = () => {
   const { register, control } = useSettings();
+  const { value } = useIntegration();
+  // Bustral: the video attached to this YouTube post, so the thumbnail field
+  // can offer "Choose from video" alongside upload / the design editor.
+  const videoMedia = useMemo(() => {
+    const media = value
+      ?.flatMap((p) => p.image || [])
+      .find((m) => hasExtension(m.path, 'mp4'));
+    return media ? { id: media.id, path: media.path } : undefined;
+  }, [value]);
   return (
     <div className="flex flex-col">
       <Input label="Title" {...register('title')} maxLength={100} />
@@ -74,6 +85,7 @@ const YoutubeSettings: FC = () => {
           height={720}
           label="Thumbnail"
           description="Thumbnail picture (optional)"
+          videoMedia={videoMedia}
           {...register('thumbnail')}
         />
       </div>

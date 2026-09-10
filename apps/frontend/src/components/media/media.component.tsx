@@ -31,7 +31,10 @@ import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { ThirdPartyMedia } from '@gitroom/frontend/components/third-parties/third-party.media';
 import { ReactSortable } from 'react-sortablejs';
-import { MediaComponentInner } from '@gitroom/frontend/components/launches/helpers/media.settings.component';
+import {
+  MediaComponentInner,
+  CreateThumbnail,
+} from '@gitroom/frontend/components/launches/helpers/media.settings.component';
 import { AiVideo } from '@gitroom/frontend/components/launches/ai.video';
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import { ThirdPartyMediaLibrary } from '@gitroom/frontend/components/third-parties/third-party.media-library';
@@ -907,13 +910,29 @@ export const MediaComponent: FC<{
   type?: 'image' | 'video';
   width?: number;
   height?: number;
+  // Bustral: the video already attached to this post, if any — lets the user
+  // grab a frame from it as the thumbnail instead of only uploading or using
+  // the (license-gated) design editor.
+  videoMedia?: { id: string; path: string };
 }> = (props) => {
   const t = useT();
 
-  const { name, type, label, description, onChange, value, width, height } =
-    props;
+  const {
+    name,
+    type,
+    label,
+    description,
+    onChange,
+    value,
+    width,
+    height,
+    videoMedia,
+  } = props;
   const { getValues } = useSettings();
   const user = useUser();
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const [capturingFrame, setCapturingFrame] = useState(false);
   useEffect(() => {
     const settings = getValues()[props.name];
     if (settings) {
@@ -964,6 +983,46 @@ export const MediaComponent: FC<{
       ),
     });
   }, [t]);
+  const showFromVideoModal = useCallback(() => {
+    if (!videoMedia) {
+      return;
+    }
+    modals.openModal({
+      title: t('choose_frame_from_video', 'Choose frame from video'),
+      askClose: false,
+      closeOnEscape: true,
+      children: (close) => (
+        <CreateThumbnail
+          media={videoMedia}
+          onSelect={async (blob) => {
+            setCapturingFrame(true);
+            try {
+              const formData = new FormData();
+              formData.append('file', blob, 'thumbnail.jpg');
+              const data = await (
+                await fetch('/media/upload-simple', {
+                  method: 'POST',
+                  body: formData,
+                })
+              ).json();
+              changeMedia([{ id: data.id, path: data.path }]);
+              close();
+            } catch (err) {
+              toaster.show(
+                t(
+                  'failed_to_capture_frame',
+                  'Could not capture that frame, please try again'
+                ),
+                'warning'
+              );
+            } finally {
+              setCapturingFrame(false);
+            }
+          }}
+        />
+      ),
+    });
+  }, [t, videoMedia, changeMedia, fetch, toaster]);
   const clearMedia = useCallback(() => {
     setCurrentMedia(undefined);
     onChange({
@@ -988,6 +1047,15 @@ export const MediaComponent: FC<{
       )}
       <div className="flex gap-[5px]">
         <Button onClick={showModal}>{t('select', 'Select')}</Button>
+        {!!videoMedia && (
+          <Button
+            loading={capturingFrame}
+            onClick={showFromVideoModal}
+            className="!bg-customColor45"
+          >
+            {t('choose_from_video', 'Choose from video')}
+          </Button>
+        )}
         <Button onClick={showDesignModal} className="!bg-customColor45">
           {t('editor', 'Editor')}
         </Button>

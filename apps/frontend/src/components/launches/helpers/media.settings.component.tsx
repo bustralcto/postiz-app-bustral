@@ -90,7 +90,7 @@ export const CreateThumbnail: FC<{
   media:
     | {
         id: string;
-        name: string;
+        name?: string;
         path: string;
         thumbnail?: string;
         alt?: string;
