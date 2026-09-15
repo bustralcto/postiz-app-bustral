@@ -160,10 +160,11 @@ export class SpotifyProvider extends SocialAbstract implements SocialProvider {
   ): Promise<PostResponse[]> {
     const [firstPost] = postDetails;
 
-    const hasAudioOrVideo = (firstPost.media || []).some(
-      (m) => m.type === 'video'
-    );
-    if (!hasAudioOrVideo) {
+    // Media can only ever be 'image' | 'video' (see custom.upload.validation.ts —
+    // raw audio uploads are rejected before they reach here), so a real podcast
+    // episode has to be uploaded as an mp4 container.
+    const hasVideo = (firstPost.media || []).some((m) => m.type === 'video');
+    if (!hasVideo) {
       return [
         {
           id: firstPost.id,

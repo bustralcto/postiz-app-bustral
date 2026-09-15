@@ -192,275 +192,291 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
 
   const schedule = useCallback(
     (type: 'draft' | 'now' | 'schedule' | 'update') => async () => {
-      let republish = false;
-      if (
-        (type === 'now' || type === 'schedule') &&
-        (existingData?.posts?.[0]?.state === 'PUBLISHED' ||
-          (existingData?.posts?.[0]?.state === 'QUEUE' &&
-            dayjs().isAfter(date.utc())))
-      ) {
-        const channels = selectedIntegrations
-          .map((p) => p.integration.name)
-          .join(', ');
-        const isRecurring =
-          !!repeater || !!existingData?.posts?.[0]?.intervalInDays;
+      try {
+        let republish = false;
+        if (
+          (type === 'now' || type === 'schedule') &&
+          (existingData?.posts?.[0]?.state === 'PUBLISHED' ||
+            (existingData?.posts?.[0]?.state === 'QUEUE' &&
+              dayjs().isAfter(date.utc())))
+        ) {
+          const channels = selectedIntegrations
+            .map((p) => p.integration.name)
+            .join(', ');
+          const isRecurring =
+            !!repeater || !!existingData?.posts?.[0]?.intervalInDays;
 
-        const whatToDo = await new Promise((resolve) => {
-          modal.openModal({
-            title: t('what_do_you_want_to_do', 'What do you want to do?'),
-            children: (
-              <div className="flex flex-col">
-                <div className="text-[20px] mb-[20px]">
-                  {t(
-                    'post_already_published_republish_warning',
-                    'This post was already published. Republishing will publish it again to'
-                  )}{' '}
-                  {channels} {t('republish_at', 'at')}{' '}
-                  {date.format('DD/MM/YYYY HH:mm')}.
-                  {isRecurring && (
-                    <div className="mt-[10px]">
-                      {t(
-                        'republish_recurring_note',
-                        'This is a recurring post: your changes apply to all future recurrences starting now.'
-                      )}
+          const whatToDo = await new Promise((resolve) => {
+            modal.openModal({
+              title: t('what_do_you_want_to_do', 'What do you want to do?'),
+              children: (
+                <div className="flex flex-col">
+                  <div className="text-[20px] mb-[20px]">
+                    {t(
+                      'post_already_published_republish_warning',
+                      'This post was already published. Republishing will publish it again to'
+                    )}{' '}
+                    {channels} {t('republish_at', 'at')}{' '}
+                    {date.format('DD/MM/YYYY HH:mm')}.
+                    {isRecurring && (
+                      <div className="mt-[10px]">
+                        {t(
+                          'republish_recurring_note',
+                          'This is a recurring post: your changes apply to all future recurrences starting now.'
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex w-full gap-[10px]">
+                    <div className="flex-1 flex">
+                      <Button
+                        type="button"
+                        className="flex-1"
+                        onClick={() => resolve('update')}
+                      >
+                        {t(
+                          'just_update_post_details',
+                          'Just update the post details'
+                        )}
+                      </Button>
                     </div>
-                  )}
-                </div>
-                <div className="flex w-full gap-[10px]">
-                  <div className="flex-1 flex">
-                    <Button
-                      type="button"
-                      className="flex-1"
-                      onClick={() => resolve('update')}
-                    >
-                      {t(
-                        'just_update_post_details',
-                        'Just update the post details'
-                      )}
-                    </Button>
-                  </div>
-                  <div className="flex-1 flex">
-                    <Button
-                      type="button"
-                      className="flex-1"
-                      onClick={() => resolve('republish')}
-                    >
-                      {t('republish_the_post', 'Republish the post')}
-                    </Button>
+                    <div className="flex-1 flex">
+                      <Button
+                        type="button"
+                        className="flex-1"
+                        onClick={() => resolve('republish')}
+                      >
+                        {t('republish_the_post', 'Republish the post')}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ),
+              ),
+            });
           });
-        });
 
-        if (whatToDo === 'update') {
-          type = 'update';
+          if (whatToDo === 'update') {
+            type = 'update';
+          }
+
+          if (whatToDo === 'republish') {
+            republish = true;
+          }
         }
 
-        if (whatToDo === 'republish') {
-          republish = true;
+        setLoading(true);
+
+        // Pull the local values to build the payload, but rely on the server
+        // (`/posts/valid`) for the actual validation — checkValidity now lives
+        // server-side so it can't be bypassed.
+        const allValues = await ref.current.getAllValues();
+
+        const integrationById = (id: string) =>
+          selectedIntegrations.find((p) => p.integration.id === id);
+
+        const group = existingData.group || makeId(10);
+
+        const posts = allValues.map((post: any) => ({
+          integration: {
+            id: post.id,
+          },
+          group,
+          settings: { ...(post.settings || {}) },
+          value: post.values.map((value: any) => ({
+            ...(value.id ? { id: value.id } : {}),
+            content: value.content,
+            delay: value.delay || 0,
+            image:
+              (value?.media || []).map(
+                ({ id, path, alt, thumbnail, thumbnailTimestamp }: any) => ({
+                  id,
+                  path,
+                  alt,
+                  thumbnail,
+                  thumbnailTimestamp,
+                })
+              ) || [],
+          })),
+        }));
+
+        if (!dummy) {
+          const checkAllValid = await (
+            await fetch('/posts/valid', {
+              method: 'POST',
+              body: JSON.stringify({ type, posts }),
+            })
+          ).json();
+
+          const focus = (id: string, where: 'fix' | 'preview') => {
+            integrationById(id)?.ref?.current?.[where]?.();
+          };
+
+          const notEnoughChars = checkAllValid.filter(
+            (p: any) => p.emptyContent
+          );
+
+          for (const item of notEnoughChars) {
+            toaster.show(
+              `${capitalize(item.identifier.split('-')[0])} (${item.name}):` +
+                ' ' +
+                t(
+                  'post_needs_content_or_image',
+                  'Your post should have at least one character or one image.'
+                ),
+              'warning'
+            );
+            setLoading(false);
+            focus(item.id, 'preview');
+            return;
+          }
+
+          if (type !== 'draft') {
+            for (const item of checkAllValid) {
+              if (item.valid === false) {
+                toaster.show(
+                  `${capitalize(item.identifier.split('-')[0])} (${
+                    item.name
+                  }): ${
+                    item.settingsError ||
+                    t('please_fix_your_settings', 'Please fix your settings')
+                  }`,
+                  'warning'
+                );
+                focus(item.id, 'fix');
+                setLoading(false);
+                setShowSettings(true);
+                return;
+              }
+
+              if (item.errors !== true) {
+                toaster.show(
+                  `${capitalize(item.identifier.split('-')[0])} (${
+                    item.name
+                  }): ${item.errors}`,
+                  'warning'
+                );
+                focus(item.id, 'preview');
+                setLoading(false);
+                setShowSettings(false);
+                return;
+              }
+
+              if (item.tooLong) {
+                toaster.show(
+                  `${item.name} (${item.identifier}) ${t(
+                    'post_is_too_long',
+                    'post is too long, please fix it'
+                  )}`,
+                  'warning'
+                );
+                focus(item.id, 'preview');
+                setLoading(false);
+                return;
+              }
+            }
+          }
         }
-      }
 
-      setLoading(true);
+        const shortlinkPreference = shortlinkPreferenceData?.shortlink || 'ASK';
 
-      // Pull the local values to build the payload, but rely on the server
-      // (`/posts/valid`) for the actual validation — checkValidity now lives
-      // server-side so it can't be bypassed.
-      const allValues = await ref.current.getAllValues();
+        let shortLink = false;
 
-      const integrationById = (id: string) =>
-        selectedIntegrations.find((p) => p.integration.id === id);
+        if (!dummy && shortlinkPreference !== 'NO') {
+          const shortLinkUrl = await (
+            await fetch('/posts/should-shortlink', {
+              method: 'POST',
+              body: JSON.stringify({
+                messages: allValues
+                  // platforms that remove links won't keep shortlinks either
+                  .filter(
+                    (p: any) => !integrationById(p.id)?.integration?.stripLinks
+                  )
+                  .flatMap((p: any) => p.values.flatMap((a: any) => a.content)),
+              }),
+            })
+          ).json();
 
-      const group = existingData.group || makeId(10);
+          if (shortLinkUrl.ask) {
+            if (shortlinkPreference === 'YES') {
+              // Automatically shortlink without asking
+              shortLink = true;
+            } else {
+              // ASK: Show the dialog
+              shortLink = await deleteDialog(
+                t(
+                  'shortlink_urls_question',
+                  'Do you want to shortlink the URLs? it will let you get statistics over clicks'
+                ),
+                t('yes_shortlink_it', 'Yes, shortlink it!'),
+                undefined,
+                t('no_original_urls', 'No, original URLs')
+              );
+            }
+          }
+        }
 
-      const posts = allValues.map((post: any) => ({
-        integration: {
-          id: post.id,
-        },
-        group,
-        settings: { ...(post.settings || {}) },
-        value: post.values.map((value: any) => ({
-          ...(value.id ? { id: value.id } : {}),
-          content: value.content,
-          delay: value.delay || 0,
-          image:
-            (value?.media || []).map(
-              ({ id, path, alt, thumbnail, thumbnailTimestamp }: any) => ({
-                id,
-                path,
-                alt,
-                thumbnail,
-                thumbnailTimestamp,
-              })
-            ) || [],
-        })),
-      }));
-
-      if (!dummy) {
-        const checkAllValid = await (
-          await fetch('/posts/valid', {
-            method: 'POST',
-            body: JSON.stringify({ type, posts }),
-          })
-        ).json();
-
-        const focus = (id: string, where: 'fix' | 'preview') => {
-          integrationById(id)?.ref?.current?.[where]?.();
+        const data = {
+          type,
+          ...(republish ? { republish } : {}),
+          ...(repeater ? { inter: repeater } : {}),
+          tags,
+          shortLink,
+          date: date.utc().format('YYYY-MM-DDTHH:mm:ss'),
+          posts,
         };
 
-        const notEnoughChars = checkAllValid.filter((p: any) => p.emptyContent);
+        if (dummy) {
+          modal.openModal({
+            title: '',
+            children: <DummyCodeComponent code={data} />,
+            classNames: {
+              modal: 'w-[100%] bg-transparent text-textColor',
+            },
+            size: '100%',
+            withCloseButton: false,
+            closeOnEscape: true,
+            closeOnClickOutside: true,
+          });
 
-        for (const item of notEnoughChars) {
-          toaster.show(
-            `${capitalize(item.identifier.split('-')[0])} (${item.name}):` +
-              ' ' +
-              t(
-                'post_needs_content_or_image',
-                'Your post should have at least one character or one image.'
-              ),
-            'warning'
-          );
           setLoading(false);
-          focus(item.id, 'preview');
-          return;
         }
 
-        if (type !== 'draft') {
-          for (const item of checkAllValid) {
-            if (item.valid === false) {
-              toaster.show(
-                `${capitalize(item.identifier.split('-')[0])} (${item.name}): ${
-                  item.settingsError ||
-                  t('please_fix_your_settings', 'Please fix your settings')
-                }`,
-                'warning'
-              );
-              focus(item.id, 'fix');
-              setLoading(false);
-              setShowSettings(true);
-              return;
-            }
+        if (!dummy) {
+          addEditSets
+            ? addEditSets(data)
+            : await fetch('/posts', {
+                method: 'POST',
+                body: JSON.stringify(data),
+              });
 
-            if (item.errors !== true) {
-              toaster.show(
-                `${capitalize(item.identifier.split('-')[0])} (${item.name}): ${
-                  item.errors
-                }`,
-                'warning'
-              );
-              focus(item.id, 'preview');
-              setLoading(false);
-              setShowSettings(false);
-              return;
-            }
-
-            if (item.tooLong) {
-              toaster.show(
-                `${item.name} (${item.identifier}) ${t(
-                  'post_is_too_long',
-                  'post is too long, please fix it'
-                )}`,
-                'warning'
-              );
-              focus(item.id, 'preview');
-              setLoading(false);
-              return;
-            }
-          }
-        }
-      }
-
-      const shortlinkPreference = shortlinkPreferenceData?.shortlink || 'ASK';
-
-      let shortLink = false;
-
-      if (!dummy && shortlinkPreference !== 'NO') {
-        const shortLinkUrl = await (
-          await fetch('/posts/should-shortlink', {
-            method: 'POST',
-            body: JSON.stringify({
-              messages: allValues
-                // platforms that remove links won't keep shortlinks either
-                .filter(
-                  (p: any) => !integrationById(p.id)?.integration?.stripLinks
-                )
-                .flatMap((p: any) => p.values.flatMap((a: any) => a.content)),
-            }),
-          })
-        ).json();
-
-        if (shortLinkUrl.ask) {
-          if (shortlinkPreference === 'YES') {
-            // Automatically shortlink without asking
-            shortLink = true;
-          } else {
-            // ASK: Show the dialog
-            shortLink = await deleteDialog(
-              t(
-                'shortlink_urls_question',
-                'Do you want to shortlink the URLs? it will let you get statistics over clicks'
-              ),
-              t('yes_shortlink_it', 'Yes, shortlink it!'),
-              undefined,
-              t('no_original_urls', 'No, original URLs')
+          if (!addEditSets) {
+            mutate();
+            toaster.show(
+              !existingData.integration
+                ? t('added_successfully', 'Added successfully')
+                : t('updated_successfully', 'Updated successfully')
             );
           }
+          if (customClose) {
+            setTimeout(() => {
+              customClose();
+            }, 2000);
+          }
+
+          if (!addEditSets) {
+            modal.closeAll();
+          }
         }
-      }
-
-      const data = {
-        type,
-        ...(republish ? { republish } : {}),
-        ...(repeater ? { inter: repeater } : {}),
-        tags,
-        shortLink,
-        date: date.utc().format('YYYY-MM-DDTHH:mm:ss'),
-        posts,
-      };
-
-      if (dummy) {
-        modal.openModal({
-          title: '',
-          children: <DummyCodeComponent code={data} />,
-          classNames: {
-            modal: 'w-[100%] bg-transparent text-textColor',
-          },
-          size: '100%',
-          withCloseButton: false,
-          closeOnEscape: true,
-          closeOnClickOutside: true,
-        });
-
+      } catch (err) {
+        toaster.show(
+          t(
+            'something_went_wrong_publishing',
+            'Something went wrong, please try again.'
+          ),
+          'warning'
+        );
+      } finally {
         setLoading(false);
-      }
-
-      if (!dummy) {
-        addEditSets
-          ? addEditSets(data)
-          : await fetch('/posts', {
-              method: 'POST',
-              body: JSON.stringify(data),
-            });
-
-        if (!addEditSets) {
-          mutate();
-          toaster.show(
-            !existingData.integration
-              ? t('added_successfully', 'Added successfully')
-              : t('updated_successfully', 'Updated successfully')
-          );
-        }
-        if (customClose) {
-          setTimeout(() => {
-            customClose();
-          }, 2000);
-        }
-
-        if (!addEditSets) {
-          modal.closeAll();
-        }
       }
     },
     [ref, repeater, tags, date, addEditSets, dummy, shortlinkPreferenceData]
