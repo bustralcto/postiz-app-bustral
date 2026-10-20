@@ -82,6 +82,19 @@ export class InstagramProvider
         return 'Audio can only be added to a video Reel';
       }
     }
+    // Instagram silently rejects (or badly crops) non-portrait Story media -
+    // catching it here turns a cryptic media_publish error code into a clear
+    // message before we ever call the API. Only checked for images: video
+    // aspect ratio would need ffprobe, which isn't a dependency here.
+    if (settings?.post_type === 'story') {
+      const image = firstPost?.find((f) => !hasExtension(f.path, 'mp4'));
+      if (image) {
+        const { width, height } = await this.getImageDimensions(image.path);
+        if (width && height && width >= height) {
+          return 'Stories must be vertical (portrait, ~9:16) - this image is landscape or square';
+        }
+      }
+    }
     return true;
   }
 

@@ -53,6 +53,18 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       if (!firstPost?.length) {
         return 'Story should have at least one media';
       }
+
+      // Facebook silently rejects (or badly crops) non-portrait Story media -
+      // catching it here turns a cryptic API error into a clear message
+      // before we ever call the API. Only checked for images: video aspect
+      // ratio would need ffprobe, which isn't a dependency here.
+      const image = firstPost.find((f) => !hasExtension(f.path, 'mp4'));
+      if (image) {
+        const { width, height } = await this.getImageDimensions(image.path);
+        if (width && height && width >= height) {
+          return 'Stories must be vertical (portrait, ~9:16) - this image is landscape or square';
+        }
+      }
     }
     return true;
   }
