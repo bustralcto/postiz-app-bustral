@@ -125,7 +125,11 @@ export class LinkedinPageProvider
   override async generateAuthUrl() {
     const state = makeId(6);
     const codeVerifier = makeId(30);
-    const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&prompt=none&client_id=${
+    // No prompt=none: that requests silent (no-UI) authorization, which only
+    // works when the user already has a prior grant. On a first-time connect
+    // there's nothing to reuse, so LinkedIn can't consent silently and shows
+    // a generic "Bummer, something went wrong" instead of the consent screen.
+    const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${
       process.env.LINKEDIN_PAGE_CLIENT_ID || process.env.LINKEDIN_CLIENT_ID
     }&redirect_uri=${encodeURIComponent(
       `${process.env.FRONTEND_URL}/integrations/social/linkedin-page`
