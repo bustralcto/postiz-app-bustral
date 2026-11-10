@@ -25,7 +25,7 @@ import { getGoogleDriveClient } from '@gitroom/nestjs-libraries/3rdparties/googl
 @ApiTags('Third Party')
 @Controller('/third-party/google-drive')
 export class GoogleDriveProxyController {
-  @Get('/proxy')
+  @Get(['/proxy', '/proxy/:filename'])
   async proxy(@Query('token') token: string, @Res() res: Response) {
     if (!token) {
       throw new HttpException('Missing token', 400);

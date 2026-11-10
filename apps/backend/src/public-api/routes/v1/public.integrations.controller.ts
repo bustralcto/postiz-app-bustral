@@ -194,7 +194,7 @@ export class PublicIntegrationsController {
     if (!fileId) {
       throw new HttpException({ msg: 'Missing fileId' }, 400);
     }
-    return { url: buildProxyUrl(fileId) };
+    return { url: buildProxyUrl(fileId, 'video.mp4') };
   }
 
   @Get('/posts')

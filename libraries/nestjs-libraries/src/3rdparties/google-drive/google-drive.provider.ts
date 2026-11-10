@@ -35,7 +35,7 @@ const VIDEO_MIME_TYPES = new Set(['video/mp4', 'video/quicktime']);
  * grants access) purely so importMedia can re-derive a fresh token from an
  * expired proxy URL without needing its own separate lookup.
  */
-export function buildProxyUrl(fileId: string): string {
+export function buildProxyUrl(fileId: string, filename?: string): string {
   // Deliberately NOT BACKEND_INTERNAL_URL — that's for server-to-server
   // traffic INSIDE the docker network (e.g. http://backend:3000) and isn't
   // reachable from wherever Postiz's own outbound fetch actually runs, nor
@@ -55,7 +55,12 @@ export function buildProxyUrl(fileId: string): string {
     purpose: 'google-drive-import',
     exp: Math.floor(Date.now() / 1000) + 5 * 60,
   });
-  return `${backendUrl}/third-party/google-drive/proxy?fileId=${encodeURIComponent(
+  // `filename` (ej. "video.mp4") va como último tramo del path: el
+  // upload-from-url de la API pública exige que la URL, antes del "?",
+  // termine en .png/.jpg/.gif/.webp/.mp4 (ValidUrlExtension) y sin eso rechaza
+  // el video con 400. El controlador ignora ese tramo, solo lo usa el validador.
+  const path = filename ? `proxy/${encodeURIComponent(filename)}` : 'proxy';
+  return `${backendUrl}/third-party/google-drive/${path}?fileId=${encodeURIComponent(
     fileId
   )}&token=${encodeURIComponent(token)}`;
 }
